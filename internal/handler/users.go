@@ -3,7 +3,17 @@ package handler
 import (
 	"encoding/json"
 	"net/http"
+
+	"github.com/Shyyw1e/user/internal/store"
 )
+
+type Handler struct {
+	store *store.Store
+}
+
+func New(s *store.Store) *Handler {
+	return &Handler{store: s}
+}
 
 func ListUsers(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
