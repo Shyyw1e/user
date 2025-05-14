@@ -7,49 +7,47 @@ import (
 	"os"
 	"os/signal"
 	"time"
-
+	"github.com/Shyyw1e/user/internal/store"
 	"github.com/Shyyw1e/user/internal/handler"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 )
 
 func main() {
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
-	defer stop()
+	st := store.NewInMemoryStore()
+	h := handler.New(st)
 
 	r := chi.NewRouter()
 
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Logger)
+	r.Use(middleware.Timeout(10 *time.Second))
 	r.Use(middleware.Recoverer)
 
-	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"status":"ok"}`))
-	})
-	r.Route("/users", func(r chi.Router) {
-		r.Get("/", handler.ListUsers)
-		r.Post("/", handler.CreateUser)
-		r.Get("/{id}", handler.GetUser)
-		r.Put("/{id}", handler.UpdateUser)
-		r.Delete("/{id}", handler.DeleteUser)
-	})
+	r.Get("/users/", h.ListUsers)
+	r.Post("/users/", h.CreateUser)
+	r.Get("/users/{id}", h.GetUser)
+	r.Put("/users/{id}", h.UpdateUser)
+	r.Delete("/users/{id}", h.DeleteUser)
 
 	srv := &http.Server{
 		Addr: ":8080",
 		Handler: r,
 	}
 
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, os.Interrupt)
+
 	go func() {
 		log.Println("Server Listening at localhost:8080")
-		if err := srv.ListenAndServe(); err != nil {
-			log.Fatalf("listening: %s\n", err)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("Server error: %s\n", err)
 
 		}
 	}()
 
-	<-ctx.Done()
+	<-stop
 	log.Println("Shutdown signal received")
 
 	ctx, cancel := context.WithTimeout(context.Background(),  5*time.Second)
